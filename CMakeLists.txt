@@ -82,6 +82,8 @@ function(TFexe exename srcfiles)
     endif ()
 endfunction()
 
+# Exmaples
 TFexe(00-Window Examples/01-Triangle/00-window.cpp)
 TFexe(01-Triangle Examples/01-Triangle/01-triangle.cpp)
 TFexe(01.1-Triangle-Append Examples/01-Triangle/01.1-triangle-append.cpp)
+TFexe(02-Texture Examples/02-Texture/02-texture.cpp)
