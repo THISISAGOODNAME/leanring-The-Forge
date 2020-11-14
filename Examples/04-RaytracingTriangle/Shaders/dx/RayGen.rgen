@@ -1,0 +1,81 @@
+struct Viewport
+{
+    float left;
+    float top;
+    float right;
+    float bottom;
+};
+
+struct RayGenConstantBuffer
+{
+    Viewport viewport;
+    Viewport stencil;
+};
+
+bool IsInsideViewport(float2 p, Viewport viewport)
+{
+    return (p.x >= viewport.left && p.x <= viewport.right)
+        && (p.y >= viewport.bottom && p.y <= viewport.top);
+}
+
+RaytracingAccelerationStructure		gRtScene	: register(t0);
+RWTexture2D<float4>					Tex0		: register(u0);
+
+cbuffer rayGenCB : register(b0, space1)
+{
+    RayGenConstantBuffer rayGenCBufferData;
+}
+
+struct RayPayload
+{
+	float4 color;
+};
+
+[shader("raygeneration")]
+void rayGen()
+{
+	uint2 launchIndex = DispatchRaysIndex().xy;
+	uint2 launchDim = DispatchRaysDimensions().xy;
+	float2 lerpValues = (float2)launchIndex / (float2)launchDim;
+
+	// Orthographic projection since we're raytracing in screen space.
+    float3 rayDir = float3(0, 0, 1);
+    float3 origin = float3(
+        lerp(rayGenCBufferData.viewport.left, rayGenCBufferData.viewport.right, lerpValues.x),
+        lerp(rayGenCBufferData.viewport.top, rayGenCBufferData.viewport.bottom, lerpValues.y),
+        0.0f);
+
+    if (IsInsideViewport(origin.xy, rayGenCBufferData.stencil))
+    {
+        // Trace the ray.
+        // Set the ray's extents.
+        RayDesc ray;
+        ray.Origin = origin;
+        ray.Direction = rayDir;
+        // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+        // TMin should be kept small to prevent missing geometry at close contact areas.
+        ray.TMin = 0.001;
+        ray.TMax = 10000.0;
+        RayPayload payload = { float4(0, 0, 0, 0) };
+		/*
+		 * void TraceRay(RaytracingAccelerationStructure AccelerationStructure,
+		 *	   uint RayFlags,
+		 *	   uint InstanceInclusionMask,
+		 *	   uint RayContributionToHitGroupIndex,
+		 *	   uint MultiplierForGeometryContributionToHitGroupIndex,
+		 *	   uint MissShaderIndex,
+		 *	   RayDesc Ray,
+		 *	   inout payload_t Payload);
+		 */
+        TraceRay(gRtScene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
+
+        // Write the raytraced color to the output texture.
+        Tex0[launchIndex] = payload.color;
+    }
+    else
+    {
+        // Render interpolated DispatchRaysIndex outside the stencil window
+        Tex0[launchIndex] = float4(lerpValues, 0, 1);
+    }
+	
+}
